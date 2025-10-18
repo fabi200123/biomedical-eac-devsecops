@@ -1,0 +1,8 @@
+# Default namespace where the dashboards will be deployed
+namespace: grafana
+
+dashboardFolderName: "Kubernetes"
+
+configMap:
+  labels:
+    grafana_dashboard: "1"

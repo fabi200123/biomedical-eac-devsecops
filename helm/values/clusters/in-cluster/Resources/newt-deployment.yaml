@@ -1,0 +1,33 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: newt-deployment
+  labels:
+    app: newt
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: newt
+  template:
+    metadata:
+      labels:
+        app: newt
+    spec:
+      containers:
+        - name: newt
+          image: fosrl/newt:latest
+          envFrom:
+            - secretRef:
+                name: newt-secret
+          # If your container needs a workingDir or specific resources, add them here.
+          # resources:
+          #   limits:
+          #     cpu: "500m"
+          #     memory: "256Mi"
+          #   requests:
+          #     cpu: "250m"
+          #     memory: "128Mi"
+          # ports:
+          #   - containerPort: 80
+      restartPolicy: Always

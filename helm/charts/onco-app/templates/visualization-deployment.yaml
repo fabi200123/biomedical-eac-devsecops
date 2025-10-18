@@ -1,0 +1,39 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onco-app.fullname" . }}-visualization
+  labels:
+    app.kubernetes.io/name: {{ include "onco-app.fullname" . }}-visualization
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+spec:
+  replicas: {{ if .Values.visualization.hpa.enabled }}{{ .Values.visualization.hpa.minReplicas }}{{ else }}1{{ end }}
+  selector:
+    matchLabels:
+      app: {{ include "onco-app.fullname" . }}-visualization
+  template:
+    metadata:
+      labels:
+        app: {{ include "onco-app.fullname" . }}-visualization
+    spec:
+      containers:
+      - name: dash
+        image: {{ printf "%s:%s" .Values.visualization.image.repository .Values.visualization.image.tag | quote }}
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: MONGO_CONNECTION_STRING
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.backend.secretName }}
+              key: MONGO_CONNECTION_STRING
+        ports:
+        - containerPort: {{ .Values.visualization.service.port }}
+        volumeMounts:
+        - name: dash-storage
+          mountPath: /app/static
+    
+      volumes:
+      - name: dash-storage
+        persistentVolumeClaim:
+          claimName: dash-pvc

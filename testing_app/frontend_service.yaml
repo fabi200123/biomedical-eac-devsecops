@@ -1,0 +1,13 @@
+# frontend-service.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+spec:
+  type: NodePort              # ← makes it reachable outside the cluster
+  selector:
+    app: frontend
+  ports:
+  - port: 3000                # cluster-internal port
+    targetPort: 3000          # your containerPort
+    nodePort: 30000           # pick any 30000–32767 number

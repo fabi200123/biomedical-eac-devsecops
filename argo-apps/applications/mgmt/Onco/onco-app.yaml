@@ -1,0 +1,25 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: onco-app
+  namespace: mgmt
+spec:
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+  destination:
+    namespace: onco-app
+    server: https://kubernetes.default.svc
+  project: mgmt
+  sources:
+    - path: helm/charts/onco-app
+      repoURL: git@github.com:fabi200123/biomedical-eac-devsecops.git
+      targetRevision: HEAD
+      helm:
+        valueFiles:
+          - $values/helm/values/clusters/in-cluster/Onco/onco-app.yaml
+    - ref: values
+      repoURL: git@github.com:fabi200123/biomedical-eac-devsecops.git
+      targetRevision: HEAD

@@ -1,0 +1,16 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: resources
+  namespace: mgmt
+spec:
+  project: mgmt
+  source:
+    path: helm/values/clusters/in-cluster/Resources
+    repoURL: git@github.com:fabi200123/biomedical-eac-devsecops.git
+    targetRevision: HEAD
+    directory:
+      recurse: true
+  destination:
+    namespace: default
+    name: in-cluster

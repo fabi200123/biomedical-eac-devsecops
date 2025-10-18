@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onco-app.fullname" . }}-backend
+  labels:
+    app.kubernetes.io/name: {{ include "onco-app.fullname" . }}-backend
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+spec:
+  replicas: {{ if .Values.backend.hpa.enabled }}{{ .Values.backend.hpa.minReplicas }}{{ else }}1{{ end }}
+  selector:
+    matchLabels:
+      app: {{ include "onco-app.fullname" . }}-backend
+  template:
+    metadata:
+      labels:
+        app: {{ include "onco-app.fullname" . }}-backend
+    spec:
+      containers:
+      - name: api
+        image: {{ printf "%s:%s" .Values.backend.image.repository .Values.backend.image.tag | quote }}
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: MONGO_CONNECTION_STRING
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.backend.secretName }}
+              key: MONGO_CONNECTION_STRING
+        - name: SESSION_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.backend.secretName }}
+              key: SESSION_SECRET
+        - name: PORT
+          value: "{{ .Values.backend.service.port }}"
+        ports:
+        - containerPort: {{ .Values.backend.service.port }}

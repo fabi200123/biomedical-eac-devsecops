@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "onco-app.fullname" . }}-frontend
+  labels:
+    app.kubernetes.io/name: {{ include "onco-app.fullname" . }}-frontend
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+spec:
+  replicas: {{ if .Values.frontend.hpa.enabled }}{{ .Values.frontend.hpa.minReplicas }}{{ else }}1{{ end }}
+  selector:
+    matchLabels:
+      app: {{ include "onco-app.fullname" . }}-frontend
+  template:
+    metadata:
+      labels:
+        app: {{ include "onco-app.fullname" . }}-frontend
+    spec:
+      containers:
+      - name: ui
+        image: {{ printf "%s:%s" .Values.frontend.image.repository .Values.frontend.image.tag | quote }}
+        imagePullPolicy: IfNotPresent
+        env:
+        - name: REACT_APP_API_URL
+          value: "http://{{ include "onco-app.fullname" . }}-backend:{{ .Values.backend.service.port }}"
+        - name: CHOKIDAR_USEPOLLING
+          value: "true"
+        - name: DASH_APP_SITE_URL
+          value: "http://dash-service:{{ .Values.visualization.service.port }}"
+        - name: HOST
+          value: "0.0.0.0"
+        - name: DANGEROUSLY_DISABLE_HOST_CHECK
+          value: "true"
+        ports:
+        - containerPort: {{ .Values.frontend.service.port }}

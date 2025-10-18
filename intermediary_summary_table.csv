@@ -1,0 +1,7 @@
+stage,mean_s,stddev_s,ci_low_s,ci_high_s,n
+Repo sync,5.509,0.974,5.359,5.658,163
+Manifest apply,0.137,0.034,0.132,0.142,163
+Resource creation,16.151,4.462,15.466,16.836,163
+Deployment total,3.006,0.749,2.891,3.121,163
+Pod rollout,18.602,4.387,17.928,19.276,163
+Rollout total,21.608,4.524,20.914,22.303,163

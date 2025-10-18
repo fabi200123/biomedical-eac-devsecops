@@ -1,0 +1,20 @@
+{{- if .Values.visualization.hpa.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "onco-app.fullname" . }}-visualization-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "onco-app.fullname" . }}-visualization
+  minReplicas: {{ .Values.visualization.hpa.minReplicas }}
+  maxReplicas: {{ .Values.visualization.hpa.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.visualization.hpa.targetCPUUtilizationPercentage }}
+{{- end }}

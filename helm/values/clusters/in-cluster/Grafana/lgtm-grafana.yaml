@@ -1,0 +1,73 @@
+grafana:
+  plugins:
+  # -- Grafana data sources config. Connects to all three by default
+  datasources:
+    datasources.yaml:
+      apiVersion: 1
+      # -- Datasources linked to the Grafana instance. Override if you disable any components.
+      datasources:
+        # https://grafana.com/docs/grafana/latest/datasources/pyroscope/configure-pyroscope-data-source/
+        - name: Pyroscope Management
+          uid: pyroscope-mgmt
+          type: grafana-pyroscope-datasource
+          url: http://grafana-pyroscope-headless:4040
+        # https://grafana.com/docs/grafana/latest/datasources/loki/#provision-the-loki-data-source
+        - name: Loki Management
+          uid: loki-mgmt
+          type: loki
+          url: http://grafana-lgtm-loki-gateway.grafana.svc.cluster.local
+        # https://grafana.com/docs/grafana/latest/datasources/prometheus/#provision-the-data-source
+        - name: Mimir Management
+          uid: prom-mgmt
+          type: prometheus
+          url: http://grafana-lgtm-mimir-nginx/prometheus
+          isDefault: true
+        # https://grafana.com/docs/grafana/latest/datasources/tempo/configure-tempo-data-source/#provision-the-data-source
+        - name: Tempo Management
+          uid: tempo-mgmt
+          type: tempo
+          url: http://grafana-lgtm-tempo-query-frontend.grafana.svc.cluster.local
+          isDefault: false
+  # # Provision Grafana Kubernetes-Mixin Dashboards
+  # dashboardProviders:
+  #   dashboardproviders.yaml:
+  #     apiVersion: 1
+  #     providers:
+  #     - name: 'grafana-dashboards-kubernetes'
+  #       orgId: 1
+  #       folder: 'Kubernetes'
+  #       type: file
+  #       disableDeletion: true
+  #       editable: true
+  #       options:
+  #         path: /var/lib/grafana/dashboards/grafana-dashboards-kubernetes
+  # dashboards:
+  #   grafana-dashboards-kubernetes:
+  #     k8s-cluster-autoscaler:
+  #       url: https://raw.githubusercontent.com/fabi200123/Grafana-Kubernetes-Mixin-Dashboards/master/Dashboards/Kubernetes%20Cluster%20Autoscaler%20(via%20Prometheus)-1723804691759.json
+  #       token: ''
+  sidecar:
+    alerts:
+      enabled: true
+      label: grafana_alerts
+      labelValue: 1
+    dashboards:
+      enabled: true
+      label: grafana_dashboard
+      labelValue: 1
+      provider:
+        foldersFromFilesStructure: true
+  service:
+    type: NodePort
+  persistence:
+    enabled: true
+    accessModes:
+      - ReadWriteOnce
+    size: 30Gi
+  deploymentStrategy:
+    type: Recreate
+  grafana.ini:
+    server:
+      root_url: http://10.10.0.13:3000
+    unified_alerting:
+      enabled: true

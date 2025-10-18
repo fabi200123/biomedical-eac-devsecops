@@ -1,0 +1,26 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-dashboards
+  namespace: mgmt
+spec:
+  project: mgmt
+
+  syncPolicy:
+    automated: {}
+    syncOptions:
+      - CreateNamespace=true  # Automatically create namespace if it doesn't exist
+
+  destination:
+    namespace: grafana
+    server: 'https://kubernetes.default.svc'
+  sources:
+    - path: helm/charts/grafana-dashboards
+      repoURL: git@github.com:fabi200123/biomedical-eac-devsecops.git
+      targetRevision: HEAD
+      helm:
+        valueFiles:
+          - $values/helm/values/clusters/in-cluster/Grafana/grafana-dashboards.yaml
+    - ref: values
+      repoURL: git@github.com:fabi200123/biomedical-eac-devsecops.git
+      targetRevision: HEAD

@@ -1,0 +1,26 @@
+# frontend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: ui
+        image: fabian2001/licenta-frontend:latest
+        # this image should be built from your Dockerfile.dev
+        env:
+        - name: REACT_APP_API_URL
+          value: http://backend-service:5000
+        - name: CHOKIDAR_USEPOLLING
+          value: "true"
+        ports:
+        - containerPort: 3000

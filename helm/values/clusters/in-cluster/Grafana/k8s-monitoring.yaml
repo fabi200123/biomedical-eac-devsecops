@@ -1,0 +1,228 @@
+cluster:
+  name: in-cluster
+global:
+  scrapeInterval: 15s
+destinations:
+  - name: metricsService
+    type: prometheus
+    url: http://grafana-lgtm-mimir-nginx.grafana.svc.cluster.local/api/v1/push
+
+  - name: logsService
+    type: loki
+    url: http://grafana-lgtm-loki-gateway.grafana.svc.cluster.local/loki/api/v1/push
+
+  - name: tracesService
+    type: otlp
+    metrics:
+      enabled: true
+    logs:
+      enabled: true
+    traces:
+      enabled: true
+    url: http://grafana-lgtm-tempo-gateway.grafana.svc.cluster.local
+
+  - name: profilesService
+    type: pyroscope
+    url: http://grafana-pyroscope-headless:4040
+
+nodeLogs:
+  enabled: true
+  journal:
+    units:
+      - kubelet.service
+      - containerd.service
+clusterMetrics:
+  enabled: true
+  controlPlane:
+    enabled: true
+  opencost:
+    enabled: false
+  kubelet:
+    enabled: true
+    metricsTuning:
+      useDefaultAllowList: true
+      includeMetrics:
+        - (.*?)
+      excludeMetrics: []
+  cadvisor:
+    enabled: true
+    metricsTuning:
+      useDefaultAllowList: true
+      includeMetrics:
+        - (.*?)
+      excludeMetrics: []
+      dropEmptyContainerLabels: true
+      dropEmptyImageLabels: true
+      normalizeUnnecessaryLabels:
+        - metric: machine_memory_bytes
+          labels:
+            - boot_id
+            - system_uuid
+        - metric: machine_cpu_cores
+          labels:
+            - boot_id
+            - system_uuid
+      keepPhysicalFilesystemDevices:
+        - mmcblk.p.+
+        - nvme.+
+        - rbd.+
+        - sd.+
+        - vd.+
+        - xvd.+
+        - dasd.+
+      keepPhysicalNetworkDevices:
+        - en[ospx][0-9].*
+        - wlan[0-9].*
+        - eth[0-9].*
+  apiServer:
+    enabled: true
+    jobLabel: "integrations/kubernetes/apiserver"
+    extraDiscoveryRules: ''
+    extraMetricProcessingRules: ''
+    metricsTuning:
+      useDefaultAllowList: true
+      includeMetrics:
+        - (.*?)
+      excludeMetrics: []
+    maxCacheSize: null
+    scrapeInterval: ''
+  kube-state-metrics:
+    enabled: true
+    metricAnnotationsAllowlist:
+      - pods=[*]
+    metricsTuning:
+      useDefaultAllowList: true
+      includeMetrics:
+        - (.*?)
+      excludeMetrics: []
+  node-exporter:
+    enabled: true
+    metricsTuning:
+      useDefaultAllowList: true
+      useIntegrationAllowList: true
+      includeMetrics:
+        - (.*?)
+      excludeMetrics: []
+      dropMetricsForFilesystem:
+        - tempfs
+  kubeControllerManager:
+    enabled: true
+    extraDiscoveryRules: ''
+    extraMetricProcessingRules: ''
+    metricsTuning:
+      includeMetrics:
+        - (.*?)
+      excludeMetrics: []
+    maxCacheSize: null
+    scrapeInterval: ''
+  kubeProxy:
+    enabled: true
+    extraDiscoveryRules: ''
+    extraMetricProcessingRules: ''
+    metricsTuning:
+      includeMetrics:
+        - (.*?)
+      excludeMetrics: []
+    maxCacheSize: null
+    scrapeInterval: ''
+  kubeScheduler:
+    enabled: true
+    extraDiscoveryRules: ''
+    extraMetricProcessingRules: ''
+    metricsTuning:
+      includeMetrics:
+        - (.*?)
+      excludeMetrics: []
+    maxCacheSize: null
+    scrapeInterval: ''
+  kepler:
+    enabled: false
+    metricsTuning:
+      useDefaultAllowList: true
+      includeMetrics:
+        - (.*?)
+      excludeMetrics: []
+alloy-metrics:
+  enabled: true
+clusterEvents:
+  enabled: true
+alloy-singleton:
+  enabled: true
+podLogs:
+  enabled: true
+  extraDiscoveryRules: |
+    rule {
+      source_labels = ["__meta_kubernetes_pod_label_app_kubernetes_io_component"]
+      regex         = "(canary|read|write)"
+      action        = "drop"
+    }
+alloy-logs:
+  enabled: true
+  processors:
+    k8sattributes:
+      labels:
+        - from: pod
+          key_regex: "kubernetes.io/(.*)"
+          tag_name: "$1"
+applicationObservability:
+  enabled: true
+  receivers:
+    otlp:
+      includeDebugMetrics: true
+      grpc:
+        enabled: true
+      http:
+        enabled: true
+alloy-receiver:
+  enabled: true
+  alloy:
+    extraPorts:
+      - name: otlp-http
+        port: 4318
+        targetPort: 4318
+        protocol: TCP
+      - name: otlp-grpc
+        port: 4317
+        targetPort: 4317
+        protocol: TCP
+annotationAutodiscovery:
+  enabled: true
+prometheusOperatorObjects:
+  enabled: true
+  crds:
+    deploy: true
+integrations:
+  alloy:
+    instances:
+      - name: alloy
+        labelSelectors:
+          app.kubernetes.io/name:
+            - alloy-metrics
+            - alloy-singleton
+            - alloy-logs
+            - alloy-receiver
+        metrics:
+          tuning:
+            useDefaultAllowList: true
+            includeMetrics:
+              - (.*?)
+            excludeMetrics: []
+  mimir:
+    instances:
+      - name: mimir
+        labelSelectors:
+          app.kubernetes.io/name: mimir
+        logs:
+          enabled: true
+  loki:
+    instances:
+      - name: loki
+        labelSelectors:
+          app.kubernetes.io/name: loki
+        logs:
+          enabled: true
+profiling:
+  enabled: true
+
+alloy-profiles:
+  enabled: true

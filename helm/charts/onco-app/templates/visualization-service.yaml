@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: dash-service
+  labels:
+    app.kubernetes.io/name: {{ include "onco-app.fullname" . }}-visualization
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+spec:
+  type: {{ .Values.visualization.service.type }}
+  selector:
+    app: {{ include "onco-app.fullname" . }}-visualization
+  ports:
+  - port: {{ .Values.visualization.service.port }}
+    targetPort: {{ .Values.visualization.service.port }}
+    nodePort: {{ .Values.visualization.service.nodePort }}
+    protocol: TCP

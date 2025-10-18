@@ -1,0 +1,47 @@
+backend:
+  image:
+    repository: fabian2001/licenta-backend
+    tag: latest
+  service:
+    port: 5000
+  # name of the Secret containing MONGO_CONNECTION_STRING & SESSION_SECRET
+  secretName: backend-secret
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+frontend:
+  image:
+    repository: fabian2001/licenta-frontend
+    tag: latest
+  service:
+    type: NodePort
+    port: 3000
+    nodePort: 30000
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+
+visualization:
+  image:
+    repository: fabian2001/dash-app
+    tag: latest
+  service:
+    type: NodePort
+    port: 3001
+    nodePort: 30001
+  hpa:
+    enabled: true
+    minReplicas: 1
+    maxReplicas: 5
+    targetCPUUtilizationPercentage: 80
+  pvc:
+    storageClassName: local-path
+    accessMode: ReadWriteOnce
+    resources:
+      requests:
+        storage: 10Gi

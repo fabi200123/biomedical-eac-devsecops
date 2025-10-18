@@ -1,0 +1,223 @@
+global:
+  image:
+    # -- Overrides the Docker registry globally for all images
+    registry: null
+  # -- Overrides the priorityClassName for all pods
+  priorityClassName: null
+  # -- configures cluster domain ("cluster.local" by default)
+  clusterDomain: "cluster.local"
+  # -- configures DNS service name
+  dnsService: "kube-dns"
+  # -- configures DNS service namespace
+  dnsNamespace: "kube-system"
+
+.common: &common
+  enabled: true
+  extraEnv:
+    - name: MY_POD_IP
+      valueFrom:
+        fieldRef:
+          fieldPath: status.podIP
+  extraArgs:
+    - -config.expand-env=true
+  autoscaling:
+     enabled: false
+     maxReplicas: 5
+  storage:
+    type: filesystem
+  persistence:
+    enabled: true
+    storageClass: local-path
+    accessModes:
+      - ReadWriteOnce
+    size: 50Gi
+
+loki:
+  ingester:
+    <<: *common
+    resources: 
+      requests: 
+        cpu: 0.3
+        memory: 0.4Gi
+      limits:
+        cpu: 0.6
+        memory: 0.8Gi
+  querier:
+    <<: *common
+    resources: 
+      requests: 
+        cpu: 0.2
+        memory: 0.2Gi
+      limits:
+        cpu: 0.6
+        memory: 0.4Gi
+    engine:
+      timeout: 3m
+    max_concurrent: 20
+  distributor:
+    <<: *common
+    autoscaling:
+      # -- Enable autoscaling for the querier, this is only used if `indexGateway.enabled: true`
+      enabled: true
+      # -- Target CPU utilisation percentage for the querier
+      targetCPUUtilizationPercentage: 50
+      # -- Target memory utilisation percentage for the querier
+      targetMemoryUtilizationPercentage: 75
+    resources: 
+      requests: 
+        cpu: 0.2
+        memory: 256Mi
+      limits:
+        cpu: 0.6
+        memory: 784Mi
+  queryFrontend:
+    <<: *common
+    autoscaling:
+      # -- Enable autoscaling for the querier, this is only used if `indexGateway.enabled: true`
+      enabled: true
+      # -- Target CPU utilisation percentage for the querier
+      targetCPUUtilizationPercentage: 50
+      # -- Target memory utilisation percentage for the querier
+      targetMemoryUtilizationPercentage: 75
+    resources: 
+      requests: 
+        cpu: 0.2
+        memory: 256Mi
+      limits:
+        cpu: 1
+        memory: 512Mi
+  queryScheduler:
+    <<: *common
+    resources: 
+      requests: 
+        cpu: 0.2
+        memory: 256Mi
+      limits:
+        cpu: 0.6
+        memory: 512Mi
+    replicas: 1
+  indexGateway:
+    <<: *common
+  ruler:
+    <<: *common
+    resources: 
+      requests: 
+        cpu: 0.3
+        memory: 256Mi
+      limits:
+        cpu: 0.6
+        memory: 512Mi
+    kind: StatefulSet
+  compactor:
+    <<: *common
+    resources: 
+      requests:
+        cpu: 0.2
+        memory: 256Mi
+      limits:
+        cpu: 0.6
+        memory: 512Mi
+
+  loki:
+    structuredConfig:
+      query_scheduler:
+        # the TSDB index dispatches many more, but each individually smaller, requests. 
+        # We increase the pending request queue sizes to compensate.
+        max_outstanding_requests_per_tenant: 32768
+      querier:
+        max_concurrent: 2048
+      ruler:
+        storage:
+          local:
+            directory: /var/loki/rules
+      compactor:
+        shared_store: filesystem
+        compaction_interval: 10m
+      ingester:
+        autoforget_unhealthy: true
+      tracing:
+        enabled: true
+      memberlist:
+        cluster_label: "loki"
+        cluster_label_verification_disabled: true
+        bind_addr:
+          - ${MY_POD_IP}
+      storage_config:
+        boltdb_shipper:
+          active_index_directory: /var/loki/index
+          shared_store: filesystem
+          cache_location: /var/loki/cache
+
+      schema_config:
+        configs:
+          - from: 2020-07-01
+            store: boltdb-shipper
+            object_store: filesystem
+            schema: v11
+            index:
+              prefix: index_
+              period: 24h
+
+  gateway:
+    resources:
+      requests:
+        memory: 100Mi
+      limits:
+        memory: 384Mi
+  prometheusRule:
+    enabled: true
+    groups:
+    - name: loki_rules
+      rules:
+        - expr: histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket[1m]))
+            by (le, cluster, job))
+          record: cluster_job:loki_request_duration_seconds:99quantile
+        - expr: histogram_quantile(0.50, sum(rate(loki_request_duration_seconds_bucket[1m]))
+            by (le, cluster, job))
+          record: cluster_job:loki_request_duration_seconds:50quantile
+        - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, job) / sum(rate(loki_request_duration_seconds_count[1m]))
+            by (cluster, job)
+          record: cluster_job:loki_request_duration_seconds:avg
+        - expr: sum(rate(loki_request_duration_seconds_bucket[1m])) by (le, cluster, job)
+          record: cluster_job:loki_request_duration_seconds_bucket:sum_rate
+        - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, job)
+          record: cluster_job:loki_request_duration_seconds_sum:sum_rate
+        - expr: sum(rate(loki_request_duration_seconds_count[1m])) by (cluster, job)
+          record: cluster_job:loki_request_duration_seconds_count:sum_rate
+        - expr: histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket[1m]))
+            by (le, cluster, job, route))
+          record: cluster_job_route:loki_request_duration_seconds:99quantile
+        - expr: histogram_quantile(0.50, sum(rate(loki_request_duration_seconds_bucket[1m]))
+            by (le, cluster, job, route))
+          record: cluster_job_route:loki_request_duration_seconds:50quantile
+        - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, job, route)
+            / sum(rate(loki_request_duration_seconds_count[1m])) by (cluster, job, route)
+          record: cluster_job_route:loki_request_duration_seconds:avg
+        - expr: sum(rate(loki_request_duration_seconds_bucket[1m])) by (le, cluster, job,
+            route)
+          record: cluster_job_route:loki_request_duration_seconds_bucket:sum_rate
+        - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, job, route)
+          record: cluster_job_route:loki_request_duration_seconds_sum:sum_rate
+        - expr: sum(rate(loki_request_duration_seconds_count[1m])) by (cluster, job, route)
+          record: cluster_job_route:loki_request_duration_seconds_count:sum_rate
+        - expr: histogram_quantile(0.99, sum(rate(loki_request_duration_seconds_bucket[1m]))
+            by (le, cluster, namespace, job, route))
+          record: cluster_namespace_job_route:loki_request_duration_seconds:99quantile
+        - expr: histogram_quantile(0.50, sum(rate(loki_request_duration_seconds_bucket[1m]))
+            by (le, cluster, namespace, job, route))
+          record: cluster_namespace_job_route:loki_request_duration_seconds:50quantile
+        - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, namespace,
+            job, route) / sum(rate(loki_request_duration_seconds_count[1m])) by (cluster,
+            namespace, job, route)
+          record: cluster_namespace_job_route:loki_request_duration_seconds:avg
+        - expr: sum(rate(loki_request_duration_seconds_bucket[1m])) by (le, cluster, namespace,
+            job, route)
+          record: cluster_namespace_job_route:loki_request_duration_seconds_bucket:sum_rate
+        - expr: sum(rate(loki_request_duration_seconds_sum[1m])) by (cluster, namespace,
+            job, route)
+          record: cluster_namespace_job_route:loki_request_duration_seconds_sum:sum_rate
+        - expr: sum(rate(loki_request_duration_seconds_count[1m])) by (cluster, namespace,
+            job, route)
+          record: cluster_namespace_job_route:loki_request_duration_seconds_count:sum_rate
+  serviceMonitor:
+    enabled: true

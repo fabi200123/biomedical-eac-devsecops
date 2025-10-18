@@ -1,0 +1,28 @@
+{{- $localDict := dict "previous" "-" }}
+{{- range $path, $_ := $.Files.Glob "Dashboards/**" }}
+  {{- $file := $path | base }}
+  {{- $folder := base (dir $path) }}
+  {{- if not (eq $folder $localDict.previous) }}
+    # Processing folder: {{ $folder }}
+  {{- end }}
+  {{- $_ := set $localDict "previous" $folder -}}
+  {{- $name := printf "%s-dashboard" ($file | trimSuffix ".json") }}
+  {{- if $folder }}
+    {{- $name = printf "%s-%s-dashboard" (lower $folder) ($file | trimSuffix ".json") }}
+  {{- end }}
+  {{- if $.Values.configMap }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ $name }}
+  namespace: {{ $.Values.namespace }}
+  labels:
+    {{- toYaml $.Values.configMap.labels | nindent 4 }}
+  annotations:
+    k8s-sidecar-target-directory: /tmp/dashboards/{{ $folder }}
+data:
+  {{ $file }}: |-
+{{ $.Files.Get $path | indent 4 }}
+---
+  {{- end }}
+{{- end }}

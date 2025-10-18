@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  labels:
+    app.kubernetes.io/name: {{ include "onco-app.fullname" . }}-frontend
+    helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/managed-by: helm
+spec:
+  type: {{ .Values.frontend.service.type }}
+  selector:
+    app: {{ include "onco-app.fullname" . }}-frontend
+  ports:
+  - port: {{ .Values.frontend.service.port }}
+    targetPort: {{ .Values.frontend.service.port }}
+    nodePort: {{ .Values.frontend.service.nodePort }}
+    protocol: TCP

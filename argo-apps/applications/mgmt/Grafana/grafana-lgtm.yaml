@@ -1,0 +1,38 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: grafana-lgtm
+  namespace: mgmt
+spec:
+  syncPolicy:
+    syncOptions:
+      - CreateNamespace=true
+      - RespectIgnoreDifferences=true
+  destination:
+    namespace: grafana
+    server: https://kubernetes.default.svc
+  project: mgmt
+  sources:
+    - chart: lgtm-distributed
+      repoURL: https://grafana.github.io/helm-charts
+      targetRevision: 2.1.0
+      helm:
+        valueFiles:
+          - $values/helm/values/clusters/in-cluster/Grafana/lgtm-loki.yaml
+          - $values/helm/values/clusters/in-cluster/Grafana/lgtm-mimir.yaml
+          - $values/helm/values/clusters/in-cluster/Grafana/lgtm-grafana.yaml
+          - $values/helm/values/clusters/in-cluster/Grafana/lgtm-tempo.yaml
+    - ref: values
+      repoURL: git@github.com:fabi200123/biomedical-eac-devsecops.git
+      targetRevision: HEAD
+  ignoreDifferences:
+    - kind: Secret
+      name: grafana-lgtm
+      namespace: grafana
+      jsonPointers:
+        - /data/admin-password
+    - group: "apps"
+      kind: Deployment
+      jsonPointers:
+        - /spec/template/metadata/annotations/checksum~1secret

@@ -1,0 +1,23 @@
+---
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  annotations:
+    argocd.argoproj.io/sync-wave: "-100"
+  name: mgmt
+spec:
+  clusterResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  description: Management Applications
+  destinations:
+    - name: "*"
+      namespace: "*"
+      server: "*"
+  namespaceResourceWhitelist:
+    - group: "*"
+      kind: "*"
+  sourceRepos:
+    - "*"
+  sourceNamespaces:
+    - "mgmt"

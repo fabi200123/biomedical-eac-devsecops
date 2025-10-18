@@ -1,0 +1,9 @@
+tempo:
+  storage:
+    trace:
+      backend: local
+  persistence:
+    enabled: true
+    accessModes:
+      - ReadWriteOnce
+    size: 50Gi
