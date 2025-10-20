@@ -38,8 +38,6 @@ Inspect:
 - Example manifests: `/testing_app/`
 - Output CSVs and plots in `/data/`
 
-For full deployment, follow the [docs/reproduction.md](docs/reproduction.md) guide.
-
 ---
 
 ## Environment Requirements
