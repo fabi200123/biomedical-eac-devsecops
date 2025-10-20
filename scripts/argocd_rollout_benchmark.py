@@ -12,7 +12,7 @@ APP_NAME = "metallb"
 APP_NAMESPACE = "mgmt"                 # Argo CD Application CR namespace
 TARGET_REVISIONS = ["v0.15.1","v0.15.2"]  # revisions to toggle
 ITERATIONS = 1000
-CSV_PATH = "metallb_argocd_timings.csv"
+CSV_PATH = "../data/rollout_summaries/metallb_argocd_timings.csv"
 K8S_TARGET_NS = "metallb-system"       # where the chart installs resources
 # ---------------
 
