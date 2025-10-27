@@ -4,7 +4,7 @@ thresholds:
   # Watermarks are fractions of allocatable cluster resources.
   cpu_watermark: 0.65        # start deferring if CPU usage > 65% of allocatable
   ram_watermark: 0.70        # start deferring if RAM usage > 70% of allocatable
-  min_headroom: 0.20         # require at least 20% headroom to start a rollout (Δ)
+  min_headroom: 0.20         # require at least 20% headroom to start a rollout
 
 resources:
   Rmax: 6.0                  # total resource budget for concurrent picks (CPU + 0.1*GiB)
@@ -40,7 +40,7 @@ tick:
   max_parallel_triggers: 2  # safety cap on simultaneous Argo syncs (even if Rmax allows more)
 
 argo:
-  base_url: "https://ARGOCD.DOMAIN"  # <-- set this
+  base_url: "https://ARGOCD.DOMAIN"  # <-- templated
   token_env: "ARGO_TOKEN"            # read from env var in the container
   verify_tls: true
 
