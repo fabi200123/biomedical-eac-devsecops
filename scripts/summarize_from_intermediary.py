@@ -6,7 +6,7 @@ INPUT = "intermediary_metallb_argocd_timings.csv"
 SUMMARY_MD = "intermediary_summary_table.md"
 SUMMARY_TEX = "intermediary_summary_table.tex"
 SUMMARY_CSV = "intermediary_summary_table.csv"
-CHARTS_DIR = Path("charts")
+CHARTS_DIR = Path("../charts")
 
 # columns -> pretty names
 METRICS = [

@@ -1,0 +1,39 @@
+image:
+  repository: ghcr.io/your-org/carla-scheduler   # CHANGE to your image
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+env:
+  - name: CARLA_POLICY
+    value: /app/configs/carla_policy.yaml
+  - name: CARLA_APPS
+    value: /app/configs/apps.yaml
+  - name: ARGO_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: carla-argocd-token
+        key: token
+
+resources:
+  limits:
+    cpu: "200m"
+    memory: "256Mi"
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+
+rbac:
+  create: true
+  namespace: mgmt
+
+config:
+  # Helm will embed your repo configs (keeps chart self-contained)
+  carla_policy: |
+{{ .Files.Get "configs/carla_policy.yaml" | indent 4 }}
+  apps: |
+{{ .Files.Get "configs/apps.yaml" | indent 4 }}
+
+podAnnotations: {}
+nodeSelector: {}
+tolerations: []
+affinity: {}
