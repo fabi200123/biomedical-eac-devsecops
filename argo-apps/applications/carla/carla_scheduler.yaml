@@ -1,0 +1,24 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: carla-scheduler
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/fabi200123/biomedical-eac-devsecops.git
+    targetRevision: main
+    path: helm/carla-scheduler
+    helm:
+      values: |
+        image:
+          repository: alexbozdog/carla-scheduler
+          tag: latest
+          pullPolicy: Always
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: carla
+  syncPolicy:
+    automated:
+      selfHeal: true
+      prune: true

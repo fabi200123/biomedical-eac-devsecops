@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: carla-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels: { app: carla-scheduler }
+  template:
+    metadata:
+      labels: { app: carla-scheduler }
+{{- with .Values.podAnnotations }}
+      annotations:
+{{ toYaml . | indent 8 }}
+{{- end }}
+    spec:
+      serviceAccountName: carla-scheduler
+      containers:
+        - name: carla
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["python","/app/scripts/carla_scheduler.py"]
+          env:
+{{ toYaml .Values.env | indent 12 }}
+          volumeMounts:
+            - name: carla-config
+              mountPath: /app/configs
+              readOnly: true
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+      volumes:
+        - name: carla-config
+          configMap:
+            name: carla-config
