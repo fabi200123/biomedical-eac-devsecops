@@ -6,6 +6,8 @@ metadata:
     {{- include "carla-scheduler.labels" . | nindent 4 }}
 data:
   carla_policy.yaml: |
-{{ (.Files.Get "configs/carla_policy.yaml") | indent 4 }}
+    {{- $p := .Files.Get "configs/carla_policy.yaml" | fromYaml -}}
+    {{- $_ := set $p "argo" (dict "base_url" .Values.argo.baseUrl "token_env" "ARGO_TOKEN" "verify_tls" .Values.argo.verifyTLS) -}}
+    {{- toYaml $p | nindent 4 }}
   apps.yaml: |
 {{ (.Files.Get "configs/apps.yaml") | indent 4 }}
