@@ -26,6 +26,10 @@ rbac:
   create: true
   namespace: carla
 
+argo:
+  baseUrl: "https://argocd-server.argocd.svc.cluster.local"
+  verifyTLS: true
+
 podAnnotations: {}
 nodeSelector: {}
 tolerations: []
