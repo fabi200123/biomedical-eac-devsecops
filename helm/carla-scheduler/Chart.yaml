@@ -1,0 +1,13 @@
+apiVersion: v2
+name: carla-scheduler
+description: Clinic-Aware, Risk-Weighted, Load-Aware Orchestrator for Argo CD rollouts
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+kubeVersion: ">=1.23.0-0"
+home: https://github.com/fabi200123/biomedical-eac-devsecops
+sources:
+  - https://github.com/fabi200123/biomedical-eac-devsecops
+maintainers:
+  - name: Alex Bozdog
+  - name: Fabian Fulga

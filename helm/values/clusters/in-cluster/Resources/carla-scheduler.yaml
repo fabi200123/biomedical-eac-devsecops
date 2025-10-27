@@ -1,0 +1,14 @@
+image:
+  repository: alexbozdog/carla-scheduler
+  tag: latest
+  pullPolicy: Always
+
+env:
+  - name: ARGO_TOKEN
+    valueFrom:
+      secretKeyRef:
+        name: carla-argocd-token
+        key: token
+
+resources: {}
+podAnnotations: {}
