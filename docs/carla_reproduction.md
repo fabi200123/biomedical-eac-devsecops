@@ -80,3 +80,34 @@ All Kubernetes and Helm manifests are version-controlled in the main repository.
 Maintainers:
 @bozdogalex
 @fabi200123
+
+
+Pull your branch:
+
+git fetch origin feat/carla && git checkout feat/carla
+
+
+Create the token secret:
+
+kubectl create namespace carla || true
+kubectl -n carla create secret generic carla-argocd-token \
+  --from-literal=token='<ARGO_BEARER_TOKEN>' --dry-run=client -o yaml | kubectl apply -f -
+
+
+verify baseUrl in 
+
+helm/values/clusters/in-cluster/Resources/carla-scheduler.yaml
+
+
+Apply the CARLA Application:
+
+kubectl apply -f argo-apps/applications/carla/carla_scheduler.yaml
+
+
+Watch it come up:
+
+kubectl -n carla get pods
+kubectl -n carla logs deploy/carla-scheduler | head -n 50
+
+
+You should see: CARLA scheduler started (tick=30s, Rmax=6.00)
