@@ -1,24 +1,26 @@
+---
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: carla-scheduler
-  namespace: argocd
+  namespace: mgmt
+  annotations:
+    argocd.argoproj.io/sync-wave: "10"
 spec:
-  project: default
-  source:
-    repoURL: https://github.com/fabi200123/biomedical-eac-devsecops.git
-    targetRevision: main
-    path: helm/carla-scheduler
-    helm:
-      values: |
-        image:
-          repository: alexbozdog/carla-scheduler
-          tag: latest
-          pullPolicy: Always
-  destination:
-    server: https://kubernetes.default.svc
-    namespace: carla
+  project: mgmt
   syncPolicy:
-    automated:
-      selfHeal: true
-      prune: true
+    syncOptions:
+      - CreateNamespace=true
+  destination:
+    namespace: carla
+    server: https://kubernetes.default.svc
+  sources:
+    - path: helm/carla-scheduler
+      repoURL: git@github.com:fabi200123/biomedical-eac-devsecops.git
+      targetRevision: feat/carla          # change to HEAD after testing
+      helm:
+        valueFiles:
+          - $values/helm/values/clusters/in-cluster/Resources/carla-scheduler.yaml
+    - ref: values
+      repoURL: git@github.com:fabi200123/biomedical-eac-devsecops.git
+      targetRevision: feat/carla

@@ -1,7 +1,7 @@
 image:
-  repository: ghcr.io/your-org/carla-scheduler   # CHANGE to your image
+  repository: alexbozdog/carla-scheduler
   tag: "latest"
-  pullPolicy: IfNotPresent
+  pullPolicy: Always
 
 env:
   - name: CARLA_POLICY
@@ -24,14 +24,7 @@ resources:
 
 rbac:
   create: true
-  namespace: mgmt
-
-config:
-  # Helm will embed your repo configs (keeps chart self-contained)
-  carla_policy: |
-{{ .Files.Get "configs/carla_policy.yaml" | indent 4 }}
-  apps: |
-{{ .Files.Get "configs/apps.yaml" | indent 4 }}
+  namespace: carla
 
 podAnnotations: {}
 nodeSelector: {}
