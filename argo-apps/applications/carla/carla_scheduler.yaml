@@ -17,10 +17,10 @@ spec:
   sources:
     - path: helm/carla-scheduler
       repoURL: git@github.com:fabi200123/biomedical-eac-devsecops.git
-      targetRevision: feat/carla          # change to HEAD after testing
+      targetRevision: HEAD
       helm:
         valueFiles:
           - $values/helm/values/clusters/in-cluster/Resources/carla-scheduler.yaml
     - ref: values
       repoURL: git@github.com:fabi200123/biomedical-eac-devsecops.git
-      targetRevision: feat/carla
+      targetRevision: HEAD

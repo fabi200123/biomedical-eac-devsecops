@@ -1,7 +1,7 @@
 image:
   repository: alexbozdog/carla-scheduler
-  tag: "latest"
-  pullPolicy: Always
+  tag: "v0.1.0"
+  pullPolicy: IfNotPresent
 
 env:
   - name: CARLA_POLICY
@@ -26,6 +26,10 @@ rbac:
   create: true
   namespace: carla
 
+secrets:
+  createArgoToken: false
+  argoToken: ""
+
 argo:
   baseUrl: "https://argocd-server.argocd.svc.cluster.local"
   verifyTLS: true
@@ -34,3 +38,7 @@ podAnnotations: {}
 nodeSelector: {}
 tolerations: []
 affinity: {}
+
+pdb:
+  enabled: true
+  minAvailable: 1

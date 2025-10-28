@@ -1,0 +1,13 @@
+{{- if and .Values.pdb (ne (.Values.pdb.enabled | default true) false) }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "carla-scheduler.fullname" . }}
+  labels:
+    {{- include "carla-scheduler.labels" . | nindent 4 }}
+spec:
+  minAvailable: {{ .Values.pdb.minAvailable | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "carla-scheduler.selectorLabels" . | nindent 6 }}
+{{- end }}
