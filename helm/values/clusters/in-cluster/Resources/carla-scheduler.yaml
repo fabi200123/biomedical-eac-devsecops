@@ -1,7 +1,7 @@
 image:
   repository: alexbozdog/carla-scheduler
-  tag: latest
-  pullPolicy: Always
+  tag: v0.1.0
+  pullPolicy: IfNotPresent
 
 env:
   - name: ARGO_TOKEN
@@ -10,5 +10,14 @@ env:
         name: carla-argocd-token
         key: token
 
-resources: {}
-podAnnotations: {}
+resources:
+  requests:
+    cpu: "50m"
+    memory: "64Mi"
+  limits:
+    cpu: "200m"
+    memory: "256Mi"
+podAnnotations:
+  prometheus.io/scrape: "true"
+  prometheus.io/port: "8000"
+  prometheus.io/path: "/metrics"

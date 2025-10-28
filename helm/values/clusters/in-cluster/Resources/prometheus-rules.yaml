@@ -714,3 +714,37 @@ spec:
       "labels":
         "quantile": "0.5"
       "record": "node_quantile:kubelet_pleg_relist_duration_seconds:histogram_quantile"
+---
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: carla-scheduler-rules
+  namespace: grafana
+spec:
+  groups:
+    - name: carla-scheduler.rules
+      rules:
+        - alert: LowHeadroomWarning
+          expr: carla_headroom_ratio < 0.2
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CARLA headroom is below 20%"
+            description: "Headroom ratio has remained below 0.2 for over 10 minutes. Investigate cluster saturation or pause CARLA rollouts."
+        - alert: HighPauseRate
+          expr: increase(carla_high_risk_paused_total[10m]) > 3
+          for: 0m
+          labels:
+            severity: warning
+          annotations:
+            summary: "CARLA high-risk pauses are spiking"
+            description: "CARLA paused more than three high-risk applications over the last 10 minutes. Verify override and risk posture."
+        - alert: SyncFailureSpike
+          expr: increase(carla_sync_error_total[5m]) > 5
+          for: 0m
+          labels:
+            severity: critical
+          annotations:
+            summary: "CARLA sync failures spiking"
+            description: "CARLA recorded more than five sync errors in the last five minutes. Check Argo CD connectivity and application health."
