@@ -338,25 +338,36 @@ def knapsack_select(items: List[Tuple[dict, float, float]], Rmax: float) -> Tupl
 # ---------------------------- Argo CD client ----------------------------
 
 class ArgoClient:
-    def __init__(self, base_url: str, token: str, verify_tls: bool = True):
+    def __init__(self, base_url: str, token: str, verify_tls: bool = True, app_namespace: str = ""):
         self.base_url = base_url.rstrip("/")
         self.headers = {"Authorization": f"Bearer {token}"}
         self.verify = verify_tls
+        self.app_namespace = app_namespace
+
+    def _build_app_url(self, app_name: str, endpoint: str = "") -> str:
+        """Build application URL with proper namespace handling."""
+        if self.app_namespace:
+            # Use query parameter for namespace
+            base = f"{self.base_url}/api/v1/applications/{app_name}"
+            separator = "&" if "?" in base else "?"
+            return f"{base}{separator}appNamespace={self.app_namespace}{endpoint}"
+        else:
+            return f"{self.base_url}/api/v1/applications/{app_name}{endpoint}"
 
     def get_app(self, app_name: str) -> dict:
-        url = f"{self.base_url}/api/v1/applications/{app_name}"
+        url = self._build_app_url(app_name)
         r = requests.get(url, headers=self.headers, verify=self.verify, timeout=15)
         r.raise_for_status()
         return r.json()
 
     def set_target_revision(self, app_name: str, target_rev: str):
         # GET, mutate spec.source.targetRevision, PUT back
-        url = f"{self.base_url}/api/v1/applications/{app_name}"
         app = self.get_app(app_name)
         # Handle single-source Applications; extend if multiple sources are used
         if "spec" not in app or "source" not in app["spec"]:
             raise RuntimeError(f"Application {app_name} has unexpected spec shape")
         app["spec"]["source"]["targetRevision"] = target_rev
+        url = self._build_app_url(app_name)
         r = requests.put(url, headers=self.headers, verify=self.verify, json=app, timeout=20)
         r.raise_for_status()
 
@@ -494,7 +505,12 @@ class Carla:
         token = os.environ.get(token_env)
         if not token:
             raise RuntimeError(f"Missing env var {token_env} with Argo CD token")
-        self.argo = ArgoClient(argo["base_url"], token, argo.get("verify_tls", True))
+        self.argo = ArgoClient(
+            argo["base_url"], 
+            token, 
+            argo.get("verify_tls", True), 
+            argo.get("app_namespace", "")
+        )
 
         # Telemetry & logging paths
         tel = self.policy.get("telemetry", {})
