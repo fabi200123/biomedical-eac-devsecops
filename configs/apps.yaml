@@ -5,39 +5,33 @@
 # window_fit: optional override per-app (0/1); if omitted, computed from current time window.
 
 apps:
-  - name: "mgmt/metallb"
+  - name: "metallb"
     r_i: 1.0
     d_i: 0
     risk: 0
     toggleRevisions: ["revA", "revB"]
 
-  - name: "mgmt/k8s-monitoring"    # Grafana Alloy Operator / collectors
+  - name: "k8s-monitoring"    # Grafana Alloy Operator / collectors
     r_i: 2.0
     d_i: 1
     risk: 1
     toggleRevisions: ["revA", "revB"]
 
-  - name: "mgmt/lgtm-distributed"  # Loki+Mimir+Tempo+Pyroscope umbrella
+  - name: "grafana-lgtm"  # Loki+Mimir+Tempo+Pyroscope umbrella
     r_i: 4.5
     d_i: 2
     risk: 1
     toggleRevisions: ["revA", "revB"]
 
-  - name: "apps/onco-app"          # your biomedical workload
+  - name: "onco-app"          # your biomedical workload
     r_i: 3.0
     d_i: 2
     risk: 1
     toggleRevisions: ["revA", "revB"]
 
-  - name: "edge/ingress"           # Traefik / gateway layer
-    r_i: 1.5
-    d_i: 1
-    risk: 2
-    toggleRevisions: ["revA", "revB"]
-
-  - name: "mgmt/argocd-plugins"    # optional tiny mgmt app
+  - name: "grafana-dashboards"    # Grafana dashboards
     r_i: 1.0
-    d_i: 0
+    d_i: 1
     risk: 0
     toggleRevisions: ["revA", "revB"]
 
