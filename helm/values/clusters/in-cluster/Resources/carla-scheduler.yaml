@@ -1,6 +1,6 @@
 image:
   repository: alexbozdog/carla-scheduler
-  tag: v0.1.0
+  tag: latest
   pullPolicy: IfNotPresent
 
 env:
