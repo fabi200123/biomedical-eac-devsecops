@@ -26,6 +26,11 @@ rbac:
   create: true
   namespace: carla
 
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
 secrets:
   createArgoToken: false
   argoToken: ""
