@@ -17,6 +17,11 @@ resources:
   limits:
     cpu: "200m"
     memory: "256Mi"
+
+argo:
+  baseUrl: "https://argo-cd-argocd-server.argocd.svc.cluster.local"
+  verifyTLS: false
+
 podAnnotations:
   prometheus.io/scrape: "true"
   prometheus.io/port: "8000"
