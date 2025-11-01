@@ -21,6 +21,7 @@ resources:
 argo:
   baseUrl: "https://argo-cd-argocd-server.argocd.svc.cluster.local"
   verifyTLS: false
+  appNamespace: "mgmt"
 
 podAnnotations:
   prometheus.io/scrape: "true"

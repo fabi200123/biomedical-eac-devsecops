@@ -38,6 +38,7 @@ secrets:
 argo:
   baseUrl: "https://argo-cd-argocd-server.argocd.svc.cluster.local"
   verifyTLS: true
+  appNamespace: "mgmt"
 
 podAnnotations: {}
 nodeSelector: {}
