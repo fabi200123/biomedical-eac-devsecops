@@ -11,12 +11,6 @@ apps:
     risk: 0
     toggleRevisions: ["revA", "revB"]
 
-  - name: "k8s-monitoring"    # Grafana Alloy Operator / collectors
-    r_i: 2.0
-    d_i: 1
-    risk: 1
-    toggleRevisions: ["revA", "revB"]
-
   - name: "grafana-lgtm"  # Loki+Mimir+Tempo+Pyroscope umbrella
     r_i: 4.5
     d_i: 2
