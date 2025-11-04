@@ -23,7 +23,7 @@ windows:
   # Allowed windows for disruptive updates (outside clinic hours).
   # Each item is {day: MON|...|SUN|WEEKDAY|WEEKEND, start: "HH:MM", end: "HH:MM"}.
   allow:
-    - { day: WEEKDAY, start: "20:00", end: "07:00" }
+    - { day: WEEKDAY, start: "20:00", end: "06:00" }
     - { day: WEEKEND, start: "00:00", end: "23:59" }
   # Optional explicit blocks (e.g., announced maintenance freeze).
   block: [ ]

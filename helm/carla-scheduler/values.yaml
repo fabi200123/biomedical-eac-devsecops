@@ -13,6 +13,8 @@ env:
       secretKeyRef:
         name: carla-argocd-token
         key: token
+  - name: PYTHONWARNINGS
+    value: "ignore:Unverified HTTPS request"
 
 resources:
   limits:
