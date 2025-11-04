@@ -37,7 +37,7 @@ secrets:
 
 argo:
   baseUrl: "https://argo-cd-argocd-server.argocd.svc.cluster.local"
-  verifyTLS: true
+  verifyTLS: false
   appNamespace: "argocd"
 
 podAnnotations: {}
