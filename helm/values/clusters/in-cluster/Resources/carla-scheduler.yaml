@@ -1,14 +1,20 @@
 image:
-  repository: alexbozdog/carla-scheduler
-  tag: latest
-  pullPolicy: IfNotPresent
+  repository: fabian2001/carla-scheduler
+  tag: v1.5
+  pullPolicy: Always
 
 env:
+  - name: CARLA_POLICY
+    value: /app/configs/carla_policy.yaml
+  - name: CARLA_APPS
+    value: /app/configs/apps.yaml
   - name: ARGO_TOKEN
     valueFrom:
       secretKeyRef:
         name: carla-argocd-token
         key: token
+  - name: PYTHONWARNINGS
+    value: "ignore:Unverified HTTPS request"
 
 resources:
   requests:
@@ -21,7 +27,7 @@ resources:
 argo:
   baseUrl: "https://argo-cd-argocd-server.argocd.svc.cluster.local"
   verifyTLS: false
-  appNamespace: "mgmt"
+  appNamespace: "argocd"
 
 podAnnotations:
   prometheus.io/scrape: "true"
