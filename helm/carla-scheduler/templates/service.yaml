@@ -6,9 +6,11 @@ metadata:
   labels:
     {{- include "carla-scheduler.labels" . | nindent 4 }}
   annotations:
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "8000"
-    prometheus.io/path: "/metrics"
+    # Grafana Alloy annotations for automatic discovery
+    k8s.grafana.com/scrape: "true"
+    k8s.grafana.com/job: "carla-scheduler"
+    k8s.grafana.com/metrics.portNumber: "8000"
+    k8s.grafana.com/metrics.path: "/metrics"
 spec:
   type: ClusterIP
   ports:
