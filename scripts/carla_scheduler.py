@@ -361,9 +361,9 @@ class ArgoClient:
         """Build application URL with proper namespace handling."""
         if self.app_namespace:
             # Use query parameter for namespace
-            base = f"{self.base_url}/api/v1/applications/{app_name}"
+            base = f"{self.base_url}/api/v1/applications/{app_name}{endpoint}"
             separator = "&" if "?" in base else "?"
-            return f"{base}{separator}appNamespace={self.app_namespace}{endpoint}"
+            return f"{base}{separator}appNamespace={self.app_namespace}"
         else:
             return f"{self.base_url}/api/v1/applications/{app_name}{endpoint}"
 
@@ -382,6 +382,17 @@ class ArgoClient:
         app["spec"]["source"]["targetRevision"] = target_rev
         url = self._build_app_url(app_name)
         r = requests.put(url, headers=self.headers, verify=self.verify, json=app, timeout=20)
+        r.raise_for_status()
+
+    def trigger_sync(self, app_name: str):
+        """Trigger a sync operation for the application."""
+        url = self._build_app_url(app_name, "/sync")
+        sync_request = {
+            "prune": False,
+            "dryRun": False,
+            "strategy": {"hook": {"force": False}}
+        }
+        r = requests.post(url, headers=self.headers, verify=self.verify, json=sync_request, timeout=20)
         r.raise_for_status()
 
     def wait_succeeded(self, app_name: str, poll_s: float = 1.0, timeout_s: int = 1800) -> float:
@@ -594,8 +605,11 @@ class Carla:
                 - self.gamma * app["risk"]
                 + self.delta * window_fit)
 
-    def choose_toggle(self, app: dict) -> str:
-        toggles = app["toggles"] or ["main"]
+    def choose_toggle(self, app: dict) -> Optional[str]:
+        toggles = app["toggles"]
+        if not toggles:
+            # No toggle revisions defined - just sync without changing targetRevision
+            return None
         idx = app["next_toggle_idx"] % len(toggles)
         rev = toggles[idx]
         app["next_toggle_idx"] = idx + 1
@@ -676,19 +690,23 @@ class Carla:
                 )
             return None
 
-    def trigger_and_wait(self, app: dict, revision: str) -> float:
+    def trigger_and_wait(self, app: dict, revision: Optional[str]) -> float:
         name = app["name"]
         start_ts = time.time()
         self.inflight[name] = start_ts
         if SYNC_TRIGGER_COUNTER:
             SYNC_TRIGGER_COUNTER.inc()
         try:
-            self.argo.set_target_revision(name, revision)
+            # Only change targetRevision if a specific revision is requested
+            if revision is not None:
+                self.argo.set_target_revision(name, revision)
+            # Trigger sync
+            self.argo.trigger_sync(name)
             duration = self.argo.wait_succeeded(name)
             end_ts = time.time()
             with open(self.rollouts_csv, "a", newline="", encoding="utf-8") as fh:
                 cw = csv.writer(fh)
-                cw.writerow([int(start_ts), int(end_ts), name, revision, f"{duration:.2f}"])
+                cw.writerow([int(start_ts), int(end_ts), name, revision or "current", f"{duration:.2f}"])
             self.ema_rollout = ema_update(self.ema_rollout, duration, self.ema_alpha)
             if ROLLOUT_HISTOGRAM:
                 ROLLOUT_HISTOGRAM.observe(duration)
