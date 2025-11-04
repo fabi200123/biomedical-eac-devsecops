@@ -1,6 +1,6 @@
 image:
   repository: fabian2001/carla-scheduler
-  tag: v1.5
+  tag: v1.6
   pullPolicy: Always
 
 env:
