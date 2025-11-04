@@ -262,9 +262,18 @@ def in_allowed_window(cfg_windows: dict, dt_utc: datetime) -> bool:
         if _match(rule["day"]):
             start_h, start_m = map(int, rule["start"].split(":"))
             end_h, end_m   = map(int, rule["end"].split(":"))
-            if (cur >= datetime(dt_local.year, dt_local.month, dt_local.day, start_h, start_m).time()
-                and cur <= datetime(dt_local.year, dt_local.month, dt_local.day, end_h, end_m).time()):
-                return True
+            start_time = datetime(dt_local.year, dt_local.month, dt_local.day, start_h, start_m).time()
+            end_time = datetime(dt_local.year, dt_local.month, dt_local.day, end_h, end_m).time()
+            
+            # Handle windows that cross midnight (e.g., 20:00-06:00)
+            if end_time < start_time:
+                # Window crosses midnight: allowed if time >= start OR time <= end
+                if cur >= start_time or cur <= end_time:
+                    return True
+            else:
+                # Normal window: allowed if time >= start AND time <= end
+                if cur >= start_time and cur <= end_time:
+                    return True
     return False
 
 
