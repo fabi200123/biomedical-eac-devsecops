@@ -1,7 +1,7 @@
 image:
   repository: fabian2001/carla-scheduler
-  tag: "latest"
-  pullPolicy: IfNotPresent
+  tag: "v1.5"
+  pullPolicy: Always
 
 env:
   - name: CARLA_POLICY
