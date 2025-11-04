@@ -27,8 +27,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
 import requests
+import urllib3
 import yaml
 from socketserver import ThreadingMixIn
+
+# Suppress urllib3 InsecureRequestWarning when verify_tls=False
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 try:
     from prometheus_client import (
