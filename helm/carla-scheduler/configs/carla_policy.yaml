@@ -40,9 +40,10 @@ tick:
   max_parallel_triggers: 2  # safety cap on simultaneous Argo syncs (even if Rmax allows more)
 
 argo:
-  base_url: "https://ARGOCD.DOMAIN"  # <-- templated
-  token_env: "ARGO_TOKEN"            # read from env var in the container
-  verify_tls: true
+  base_url: "https://argo-cd-argocd-server.argocd.svc.cluster.local"
+  token_env: "ARGO_TOKEN"
+  verify_tls: false
+  app_namespace: "argocd"
 
 telemetry:
   # If you already expose K8s metrics (metrics-server), CARLA will use them.
