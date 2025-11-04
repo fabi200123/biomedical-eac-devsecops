@@ -1,5 +1,5 @@
 image:
-  repository: alexbozdog/carla-scheduler
+  repository: fabian2001/carla-scheduler
   tag: "latest"
   pullPolicy: IfNotPresent
 
