@@ -225,6 +225,33 @@ def synthesize_rollout_samples(distribution: List[Dict[str, float]], max_samples
     return pd.DataFrame({"rollout_seconds": samples})
 
 
+def write_window_summary(
+    out_path: Path,
+    start: Optional[str],
+    end: Optional[str],
+    rollout_stats: Dict[str, float],
+) -> None:
+    rows: List[Dict[str, Any]] = []
+    start_ts = pd.to_datetime(start) if start else None
+    end_ts = pd.to_datetime(end) if end else None
+    if start_ts is not None:
+        rows.append({"metric": "window_start", "value": start_ts.isoformat()})
+    if end_ts is not None:
+        rows.append({"metric": "window_end", "value": end_ts.isoformat()})
+    if start_ts is not None and end_ts is not None:
+        window_seconds = max((end_ts - start_ts).total_seconds(), 0.0)
+        rows.append({"metric": "window_hours", "value": window_seconds / 3600.0})
+    if rollout_stats:
+        rows.append({"metric": "prom_rollouts_total", "value": rollout_stats.get("n", math.nan)})
+        rows.append({"metric": "prom_rollout_mean_s", "value": rollout_stats.get("mean", math.nan)})
+        rows.append({"metric": "prom_rollout_std_s", "value": rollout_stats.get("std", math.nan)})
+        rows.append({"metric": "prom_rollout_p90_s", "value": rollout_stats.get("p90", math.nan)})
+        rows.append({"metric": "prom_rollout_p95_s", "value": rollout_stats.get("p95", math.nan)})
+    if not rows:
+        rows = [{"metric": "info", "value": "No Prometheus metadata available"}]
+    pd.DataFrame(rows).to_csv(out_path, index=False)
+
+
 def prom_query_range(
     base_url: str,
     query: str,
@@ -416,7 +443,84 @@ def plot_decisions_area(df: pd.DataFrame, out_path: Path, timezone: str) -> None
     plt.close()
 
 
-def plot_rollout_histograms(rollouts_df: pd.DataFrame, outdir: Path) -> Dict[str, float]:
+def plot_rollout_quantiles_timeseries(
+    quantiles_df: pd.DataFrame,
+    out_path: Path,
+    timezone: str,
+    global_stats: Optional[Dict[str, float]] = None,
+) -> None:
+    plt.figure(figsize=(10, 4))
+    if quantiles_df.empty:
+        plt.text(0.5, 0.5, "No rollout quantiles available", ha="center", va="center")
+        plt.axis("off")
+    else:
+        data = quantiles_df.copy().sort_values("ts")
+        if "ts" not in data.columns:
+            plt.text(0.5, 0.5, "Quantiles missing timestamps", ha="center", va="center")
+            plt.axis("off")
+        else:
+            data = data.dropna(subset=["ts"])
+            data["ts"] = pd.to_datetime(data["ts"], utc=True)
+            data["ts_local"] = data["ts"].dt.tz_convert(timezone)
+            numeric = data[["p50", "p90", "p95"]].astype(float)
+            numeric = numeric.interpolate(limit_direction="both")
+            valid = numeric.dropna(how="all")
+            if valid.empty:
+                plt.text(0.5, 0.5, "Quantile series empty", ha="center", va="center")
+                plt.axis("off")
+            else:
+                data[["p50", "p90", "p95"]] = numeric
+                plt.plot(data["ts_local"], data["p50"], label="p50", color="#1f77b4")
+                plt.fill_between(
+                    data["ts_local"],
+                    data["p50"],
+                    data["p90"],
+                    color="#1f77b4",
+                    alpha=0.2,
+                    label="p50–p90",
+                )
+                plt.fill_between(
+                    data["ts_local"],
+                    data["p90"],
+                    data["p95"],
+                    color="#ff7f0e",
+                    alpha=0.2,
+                    label="p90–p95",
+                )
+                plt.plot(data["ts_local"], data["p90"], label="p90", color="#ff7f0e", linewidth=1.5)
+                plt.plot(data["ts_local"], data["p95"], label="p95", color="#d62728", linewidth=1.5)
+                if global_stats:
+                    for level, style, color in [
+                        ("p90", "--", "#ff7f0e"),
+                        ("p95", ":", "#d62728"),
+                    ]:
+                        val = global_stats.get(level)
+                        if val is None or math.isnan(val):
+                            continue
+                        plt.axhline(val, linestyle=style, color=color, alpha=0.8)
+                        plt.text(
+                            data["ts_local"].min(),
+                            val,
+                            f"global {level} {val:.2f}s",
+                            color=color,
+                            va="bottom",
+                            fontsize=9,
+                        )
+                plt.title("CARLA Rollout Duration Quantiles")
+                plt.xlabel(f"Time ({timezone})")
+                plt.ylabel("Seconds")
+                plt.grid(alpha=0.2)
+                plt.legend(loc="upper right")
+    plt.tight_layout()
+    plt.savefig(out_path)
+    plt.close()
+
+
+def plot_rollout_histograms(
+    rollouts_df: pd.DataFrame,
+    outdir: Path,
+    annotation_stats: Optional[Dict[str, float]] = None,
+) -> Dict[str, float]:
     if rollouts_df.empty:
         plt.figure(figsize=(6, 4))
         plt.text(0.5, 0.5, "No rollout data available", ha="center", va="center")
@@ -433,11 +537,41 @@ def plot_rollout_histograms(rollouts_df: pd.DataFrame, outdir: Path) -> Dict[str
         plt.close()
         return {}
     values = rollouts_df["rollout_seconds"].astype(float)
+    stats = {
+        "n": len(xs),
+        "mean": float(values.mean()),
+        "std": float(values.std(ddof=1)) if len(values) > 1 else 0.0,
+        "median": float(values.median()),
+        "p90": float(values.quantile(0.9)),
+        "p95": float(values.quantile(0.95)),
+    }
+    overlay_stats = annotation_stats or stats
+
     plt.figure(figsize=(6, 4))
     plt.hist(values, bins=20)
     plt.title("Rollout Durations")
     plt.xlabel("Seconds")
     plt.ylabel("Count")
+    if overlay_stats:
+        y_max = plt.gca().get_ylim()[1]
+        for level, color, linestyle in [
+            ("p90", "#ff7f0e", "--"),
+            ("p95", "#d62728", ":"),
+        ]:
+            marker = overlay_stats.get(level)
+            if marker is None or math.isnan(marker):
+                continue
+            plt.axvline(marker, color=color, linestyle=linestyle, linewidth=1.4)
+            plt.text(
+                marker,
+                y_max * 0.9,
+                f"{level.upper()} {marker:.2f}s",
+                rotation=90,
+                color=color,
+                va="top",
+                ha="right",
+                fontsize=8,
+            )
     plt.tight_layout()
     plt.savefig(outdir / "fig_rollout_hist.png")
     plt.close()
@@ -451,18 +585,28 @@ def plot_rollout_histograms(rollouts_df: pd.DataFrame, outdir: Path) -> Dict[str
     plt.title("Rollout Duration ECDF")
     plt.xlabel("Seconds")
     plt.ylabel("ECDF")
+    if overlay_stats:
+        for level, color, linestyle in [
+            ("p90", "#ff7f0e", "--"),
+            ("p95", "#d62728", ":"),
+        ]:
+            marker = overlay_stats.get(level)
+            if marker is None or math.isnan(marker):
+                continue
+            plt.axvline(marker, color=color, linestyle=linestyle, linewidth=1.4)
+            plt.text(
+                marker,
+                0.1 if level == "p90" else 0.3,
+                f"{level.upper()} {marker:.2f}s",
+                rotation=90,
+                color=color,
+                va="bottom",
+                fontsize=8,
+            )
     plt.tight_layout()
     plt.savefig(outdir / "fig_rollout_ecdf.png")
     plt.close()
 
-    stats = {
-        "n": len(xs),
-        "mean": float(values.mean()),
-        "std": float(values.std(ddof=1)) if len(values) > 1 else 0.0,
-        "median": float(values.median()),
-        "p90": float(values.quantile(0.9)),
-        "p95": float(values.quantile(0.95)),
-    }
     return stats
 
 
@@ -614,7 +758,7 @@ def main() -> None:
             }
             pd.DataFrame([summary_row]).to_csv(outdir / "rollout_summary.csv", index=False)
             synthetic_rollouts = synthesize_rollout_samples(prom_rollout_distribution)
-            plot_rollout_histograms(synthetic_rollouts, outdir)
+            plot_rollout_histograms(synthetic_rollouts, outdir, annotation_stats=rollout_stats)
         else:
             # Create placeholder figures
             plot_rollout_histograms(pd.DataFrame({"rollout_seconds": []}), outdir)
@@ -625,6 +769,19 @@ def main() -> None:
     if args.decisions_csv:
         decisions_df = load_decisions_csv(Path(args.decisions_csv))
         decisions_df.to_csv(outdir / "decisions_local_copy.csv", index=False)
+
+    plot_rollout_quantiles_timeseries(
+        rollout_quantiles,
+        outdir / "fig_rollout_quantiles.png",
+        args.timezone,
+        rollout_stats if rollout_stats else prom_rollout_stats,
+    )
+    write_window_summary(
+        outdir / "summary_window.csv",
+        args.start,
+        args.end,
+        prom_rollout_stats if prom_rollout_stats else rollout_stats,
+    )
 
     latex = latex_table(headroom_summary, rollout_stats, decisions_summary)
     (outdir / "table_carla_metrics.tex").write_text(latex, encoding="utf-8")
