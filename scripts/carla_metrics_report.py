@@ -449,29 +449,57 @@ def plot_rollout_quantiles_timeseries(
     timezone: str,
     global_stats: Optional[Dict[str, float]] = None,
 ) -> None:
-    plt.figure(figsize=(10, 4))
+    fig, (ax_main, ax_cov) = plt.subplots(
+        2, 1, figsize=(10, 5), gridspec_kw={"height_ratios": [4, 0.8]}, sharex=True
+    )
     if quantiles_df.empty:
-        plt.text(0.5, 0.5, "No rollout quantiles available", ha="center", va="center")
-        plt.axis("off")
+        ax_main.text(0.5, 0.5, "No rollout quantiles available", ha="center", va="center")
+        ax_main.axis("off")
+        ax_cov.axis("off")
     else:
         data = quantiles_df.copy().sort_values("ts")
         if "ts" not in data.columns:
-            plt.text(0.5, 0.5, "Quantiles missing timestamps", ha="center", va="center")
-            plt.axis("off")
+            ax_main.text(0.5, 0.5, "Quantiles missing timestamps", ha="center", va="center")
+            ax_main.axis("off")
+            ax_cov.axis("off")
         else:
             data = data.dropna(subset=["ts"])
             data["ts"] = pd.to_datetime(data["ts"], utc=True)
             data["ts_local"] = data["ts"].dt.tz_convert(timezone)
             numeric = data[["p50", "p90", "p95"]].astype(float)
+            coverage_mask = ~numeric.isna().all(axis=1)
             numeric = numeric.interpolate(limit_direction="both")
             valid = numeric.dropna(how="all")
             if valid.empty:
-                plt.text(0.5, 0.5, "Quantile series empty", ha="center", va="center")
-                plt.axis("off")
+                ax_main.text(0.5, 0.5, "Quantile series empty", ha="center", va="center")
+                ax_main.axis("off")
+                ax_cov.axis("off")
             else:
                 data[["p50", "p90", "p95"]] = numeric
-                plt.plot(data["ts_local"], data["p50"], label="p50", color="#1f77b4")
-                plt.fill_between(
+                gap_indices = coverage_mask.rolling(window=1).apply(lambda x: 1 if x.iloc[0] else 0)
+                if not coverage_mask.all():
+                    gap_ranges: List[Tuple[pd.Timestamp, pd.Timestamp]] = []
+                    current_start: Optional[pd.Timestamp] = None
+                    for ts, covered in zip(data["ts_local"], coverage_mask):
+                        if not covered and current_start is None:
+                            current_start = ts
+                        elif covered and current_start is not None:
+                            gap_ranges.append((current_start, ts))
+                            current_start = None
+                    if current_start is not None:
+                        gap_ranges.append((current_start, data["ts_local"].iloc[-1]))
+                    for start_ts, end_ts in gap_ranges:
+                        ax_main.axvspan(start_ts, end_ts, color="lightgray", alpha=0.45)
+                        ax_main.text(
+                            start_ts,
+                            0.95,
+                            "gap",
+                            transform=ax_main.get_xaxis_transform(),
+                            fontsize=8,
+                            color="#555555",
+                        )
+                ax_main.plot(data["ts_local"], data["p50"], label="p50", color="#1f77b4")
+                ax_main.fill_between(
                     data["ts_local"],
                     data["p50"],
                     data["p90"],
@@ -479,7 +507,7 @@ def plot_rollout_quantiles_timeseries(
                     alpha=0.2,
                     label="p50–p90",
                 )
-                plt.fill_between(
+                ax_main.fill_between(
                     data["ts_local"],
                     data["p90"],
                     data["p95"],
@@ -487,8 +515,8 @@ def plot_rollout_quantiles_timeseries(
                     alpha=0.2,
                     label="p90–p95",
                 )
-                plt.plot(data["ts_local"], data["p90"], label="p90", color="#ff7f0e", linewidth=1.5)
-                plt.plot(data["ts_local"], data["p95"], label="p95", color="#d62728", linewidth=1.5)
+                ax_main.plot(data["ts_local"], data["p90"], label="p90", color="#ff7f0e", linewidth=1.5)
+                ax_main.plot(data["ts_local"], data["p95"], label="p95", color="#d62728", linewidth=1.5)
                 if global_stats:
                     for level, style, color in [
                         ("p90", "--", "#ff7f0e"),
@@ -497,8 +525,8 @@ def plot_rollout_quantiles_timeseries(
                         val = global_stats.get(level)
                         if val is None or math.isnan(val):
                             continue
-                        plt.axhline(val, linestyle=style, color=color, alpha=0.8)
-                        plt.text(
+                        ax_main.axhline(val, linestyle=style, color=color, alpha=0.8)
+                        ax_main.text(
                             data["ts_local"].min(),
                             val,
                             f"global {level} {val:.2f}s",
@@ -506,11 +534,25 @@ def plot_rollout_quantiles_timeseries(
                             va="bottom",
                             fontsize=9,
                         )
-                plt.title("CARLA Rollout Duration Quantiles")
-                plt.xlabel(f"Time ({timezone})")
-                plt.ylabel("Seconds")
-                plt.grid(alpha=0.2)
-                plt.legend(loc="upper right")
+                ax_main.set_title("CARLA Rollout Duration Quantiles")
+                ax_main.set_ylabel("Seconds")
+                ax_main.grid(alpha=0.2)
+                ax_main.legend(loc="upper right")
+
+                coverage_values = coverage_mask.astype(int).values
+                ax_cov.fill_between(
+                    data["ts_local"],
+                    0,
+                    coverage_values,
+                    step="pre",
+                    color="#2ca02c",
+                    alpha=0.6,
+                )
+                ax_cov.set_ylim(0, 1.1)
+                ax_cov.set_yticks([0, 1])
+                ax_cov.set_yticklabels(["gap", "data"])
+                ax_cov.set_xlabel(f"Time ({timezone})")
+                ax_cov.grid(alpha=0.2, axis="x")
     plt.tight_layout()
     plt.savefig(out_path)
     plt.close()
