@@ -1,7 +1,7 @@
 image:
-  repository: alexbozdog/carla-scheduler
-  tag: "v0.1.0"
-  pullPolicy: IfNotPresent
+  repository: fabian2001/carla-scheduler
+  tag: "v1.6"
+  pullPolicy: Always
 
 env:
   - name: CARLA_POLICY
@@ -13,6 +13,8 @@ env:
       secretKeyRef:
         name: carla-argocd-token
         key: token
+  - name: PYTHONWARNINGS
+    value: "ignore:Unverified HTTPS request"
 
 resources:
   limits:
@@ -26,13 +28,19 @@ rbac:
   create: true
   namespace: carla
 
+serviceAccount:
+  create: true
+  name: ""
+  annotations: {}
+
 secrets:
   createArgoToken: false
   argoToken: ""
 
 argo:
-  baseUrl: "https://argocd-server.argocd.svc.cluster.local"
-  verifyTLS: true
+  baseUrl: "https://argo-cd-argocd-server.argocd.svc.cluster.local"
+  verifyTLS: false
+  appNamespace: "argocd"
 
 podAnnotations: {}
 nodeSelector: {}

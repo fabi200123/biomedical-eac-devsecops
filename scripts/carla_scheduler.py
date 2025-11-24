@@ -27,8 +27,12 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import pytz
 import requests
+import urllib3
 import yaml
 from socketserver import ThreadingMixIn
+
+# Suppress urllib3 InsecureRequestWarning when verify_tls=False
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 try:
     from prometheus_client import (
@@ -258,9 +262,18 @@ def in_allowed_window(cfg_windows: dict, dt_utc: datetime) -> bool:
         if _match(rule["day"]):
             start_h, start_m = map(int, rule["start"].split(":"))
             end_h, end_m   = map(int, rule["end"].split(":"))
-            if (cur >= datetime(dt_local.year, dt_local.month, dt_local.day, start_h, start_m).time()
-                and cur <= datetime(dt_local.year, dt_local.month, dt_local.day, end_h, end_m).time()):
-                return True
+            start_time = datetime(dt_local.year, dt_local.month, dt_local.day, start_h, start_m).time()
+            end_time = datetime(dt_local.year, dt_local.month, dt_local.day, end_h, end_m).time()
+            
+            # Handle windows that cross midnight (e.g., 20:00-06:00)
+            if end_time < start_time:
+                # Window crosses midnight: allowed if time >= start OR time <= end
+                if cur >= start_time or cur <= end_time:
+                    return True
+            else:
+                # Normal window: allowed if time >= start AND time <= end
+                if cur >= start_time and cur <= end_time:
+                    return True
     return False
 
 
@@ -338,26 +351,48 @@ def knapsack_select(items: List[Tuple[dict, float, float]], Rmax: float) -> Tupl
 # ---------------------------- Argo CD client ----------------------------
 
 class ArgoClient:
-    def __init__(self, base_url: str, token: str, verify_tls: bool = True):
+    def __init__(self, base_url: str, token: str, verify_tls: bool = True, app_namespace: str = ""):
         self.base_url = base_url.rstrip("/")
         self.headers = {"Authorization": f"Bearer {token}"}
         self.verify = verify_tls
+        self.app_namespace = app_namespace
+
+    def _build_app_url(self, app_name: str, endpoint: str = "") -> str:
+        """Build application URL with proper namespace handling."""
+        if self.app_namespace:
+            # Use query parameter for namespace
+            base = f"{self.base_url}/api/v1/applications/{app_name}{endpoint}"
+            separator = "&" if "?" in base else "?"
+            return f"{base}{separator}appNamespace={self.app_namespace}"
+        else:
+            return f"{self.base_url}/api/v1/applications/{app_name}{endpoint}"
 
     def get_app(self, app_name: str) -> dict:
-        url = f"{self.base_url}/api/v1/applications/{app_name}"
+        url = self._build_app_url(app_name)
         r = requests.get(url, headers=self.headers, verify=self.verify, timeout=15)
         r.raise_for_status()
         return r.json()
 
     def set_target_revision(self, app_name: str, target_rev: str):
         # GET, mutate spec.source.targetRevision, PUT back
-        url = f"{self.base_url}/api/v1/applications/{app_name}"
         app = self.get_app(app_name)
         # Handle single-source Applications; extend if multiple sources are used
         if "spec" not in app or "source" not in app["spec"]:
             raise RuntimeError(f"Application {app_name} has unexpected spec shape")
         app["spec"]["source"]["targetRevision"] = target_rev
+        url = self._build_app_url(app_name)
         r = requests.put(url, headers=self.headers, verify=self.verify, json=app, timeout=20)
+        r.raise_for_status()
+
+    def trigger_sync(self, app_name: str):
+        """Trigger a sync operation for the application."""
+        url = self._build_app_url(app_name, "/sync")
+        sync_request = {
+            "prune": False,
+            "dryRun": False,
+            "strategy": {"hook": {"force": False}}
+        }
+        r = requests.post(url, headers=self.headers, verify=self.verify, json=sync_request, timeout=20)
         r.raise_for_status()
 
     def wait_succeeded(self, app_name: str, poll_s: float = 1.0, timeout_s: int = 1800) -> float:
@@ -494,7 +529,12 @@ class Carla:
         token = os.environ.get(token_env)
         if not token:
             raise RuntimeError(f"Missing env var {token_env} with Argo CD token")
-        self.argo = ArgoClient(argo["base_url"], token, argo.get("verify_tls", True))
+        self.argo = ArgoClient(
+            argo["base_url"], 
+            token, 
+            argo.get("verify_tls", True), 
+            argo.get("app_namespace", "")
+        )
 
         # Telemetry & logging paths
         tel = self.policy.get("telemetry", {})
@@ -565,8 +605,11 @@ class Carla:
                 - self.gamma * app["risk"]
                 + self.delta * window_fit)
 
-    def choose_toggle(self, app: dict) -> str:
-        toggles = app["toggles"] or ["main"]
+    def choose_toggle(self, app: dict) -> Optional[str]:
+        toggles = app["toggles"]
+        if not toggles:
+            # No toggle revisions defined - just sync without changing targetRevision
+            return None
         idx = app["next_toggle_idx"] % len(toggles)
         rev = toggles[idx]
         app["next_toggle_idx"] = idx + 1
@@ -647,19 +690,23 @@ class Carla:
                 )
             return None
 
-    def trigger_and_wait(self, app: dict, revision: str) -> float:
+    def trigger_and_wait(self, app: dict, revision: Optional[str]) -> float:
         name = app["name"]
         start_ts = time.time()
         self.inflight[name] = start_ts
         if SYNC_TRIGGER_COUNTER:
             SYNC_TRIGGER_COUNTER.inc()
         try:
-            self.argo.set_target_revision(name, revision)
+            # Only change targetRevision if a specific revision is requested
+            if revision is not None:
+                self.argo.set_target_revision(name, revision)
+            # Trigger sync
+            self.argo.trigger_sync(name)
             duration = self.argo.wait_succeeded(name)
             end_ts = time.time()
             with open(self.rollouts_csv, "a", newline="", encoding="utf-8") as fh:
                 cw = csv.writer(fh)
-                cw.writerow([int(start_ts), int(end_ts), name, revision, f"{duration:.2f}"])
+                cw.writerow([int(start_ts), int(end_ts), name, revision or "current", f"{duration:.2f}"])
             self.ema_rollout = ema_update(self.ema_rollout, duration, self.ema_alpha)
             if ROLLOUT_HISTOGRAM:
                 ROLLOUT_HISTOGRAM.observe(duration)
