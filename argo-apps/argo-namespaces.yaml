@@ -34,3 +34,9 @@ metadata:
     argocd.argoproj.io/sync-wave: "-100"
   name: metallb-system
 ---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: carla
+  annotations:
+    argocd.argoproj.io/sync-wave: "-100"

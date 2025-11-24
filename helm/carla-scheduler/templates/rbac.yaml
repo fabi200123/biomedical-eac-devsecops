@@ -1,0 +1,27 @@
+{{- if .Values.rbac.create }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: carla-scheduler
+rules:
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get","list","watch"]
+  # If metrics.k8s.io is enabled, allow reading node metrics
+  - apiGroups: ["metrics.k8s.io"]
+    resources: ["nodes"]
+    verbs: ["get","list","watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: carla-scheduler
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "carla-scheduler.serviceAccountName" . }}
+    namespace: {{ .Values.rbac.namespace | default "carla" }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: carla-scheduler
+{{- end }}

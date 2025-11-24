@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "carla-scheduler.fullname" . }}
+  labels:
+    {{- include "carla-scheduler.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "carla-scheduler.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "carla-scheduler.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      serviceAccountName: {{ include "carla-scheduler.serviceAccountName" . }}
+      {{- if .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml .Values.imagePullSecrets | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: carla
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - containerPort: 8000
+              name: http
+          command: ["python", "/app/scripts/carla_scheduler.py"]
+          {{- if .Values.env }}
+          env:
+            {{- toYaml .Values.env | nindent 12 }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - name: carla-config
+              mountPath: /app/configs
+              readOnly: true
+            - name: data
+              mountPath: /data
+      volumes:
+        - name: carla-config
+          configMap:
+            name: {{ include "carla-scheduler.fullname" . }}-config
+        - name: data
+          {{- if and .Values.persistence .Values.persistence.enabled }}
+          persistentVolumeClaim:
+            claimName: {{- if .Values.persistence.existingClaim -}}
+              {{ .Values.persistence.existingClaim }}
+            {{- else -}}
+              {{ include "carla-scheduler.fullname" . }}-data
+            {{- end }}
+          {{- else }}
+          emptyDir: {}
+          {{- end }}

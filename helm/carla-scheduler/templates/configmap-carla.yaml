@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "carla-scheduler.fullname" . }}-config
+  labels:
+    {{- include "carla-scheduler.labels" . | nindent 4 }}
+data:
+  carla_policy.yaml: |
+    {{- $p := .Files.Get "configs/carla_policy.yaml" | fromYaml -}}
+    {{- $_ := set $p "argo" (dict "base_url" .Values.argo.baseUrl "token_env" "ARGO_TOKEN" "verify_tls" .Values.argo.verifyTLS "app_namespace" .Values.argo.appNamespace) -}}
+    {{- toYaml $p | nindent 4 }}
+  apps.yaml: |
+{{ (.Files.Get "configs/apps.yaml") | indent 4 }}
