@@ -580,7 +580,7 @@ def plot_rollout_histograms(
         return {}
     values = rollouts_df["rollout_seconds"].astype(float)
     stats = {
-        "n": len(xs),
+        "n": len(values),
         "mean": float(values.mean()),
         "std": float(values.std(ddof=1)) if len(values) > 1 else 0.0,
         "median": float(values.median()),
