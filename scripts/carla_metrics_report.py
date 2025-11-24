@@ -21,7 +21,7 @@ import argparse
 import json
 import math
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 import pandas as pd
 import requests
@@ -48,6 +48,181 @@ def parse_args() -> argparse.Namespace:
 
 def ensure_dir(path: Path) -> None:
     path.mkdir(parents=True, exist_ok=True)
+
+
+def step_to_seconds(step: str) -> float:
+    try:
+        seconds = float(pd.to_timedelta(step).total_seconds())
+        return seconds if seconds > 0 else 300.0
+    except Exception:
+        return 300.0
+
+
+def integrate_rate_series(df: pd.DataFrame, step_seconds: float) -> float:
+    if df.empty:
+        return 0.0
+    data = df.sort_values("ts")
+    delta = data["ts"].shift(-1) - data["ts"]
+    delta_seconds = delta.dt.total_seconds()
+    fallback = delta_seconds.dropna().median()
+    if math.isnan(fallback) or fallback <= 0:
+        fallback = step_seconds
+    delta_seconds = delta_seconds.fillna(fallback)
+    return float((data["value"] * delta_seconds).sum())
+
+
+def integrate_rate_by_label(df: pd.DataFrame, label_column: str, step_seconds: float) -> Dict[str, float]:
+    totals: Dict[str, float] = {}
+    if df.empty or label_column not in df.columns:
+        return totals
+    for label, group in df.groupby(label_column):
+        totals[str(label)] = integrate_rate_series(group[["ts", "value"]], step_seconds)
+    return totals
+
+
+def parse_bucket_bound(value: str) -> float:
+    if value in ("+Inf", "Inf", "inf"):
+        return math.inf
+    return float(value)
+
+
+def build_bucket_distribution(bucket_totals: Dict[str, float]) -> List[Dict[str, float]]:
+    if not bucket_totals:
+        return []
+    entries = []
+    for label, total in bucket_totals.items():
+        try:
+            upper = parse_bucket_bound(label)
+        except ValueError:
+            continue
+        entries.append((upper, float(total)))
+    entries.sort(key=lambda item: item[0])
+
+    distribution: List[Dict[str, float]] = []
+    prev_upper = 0.0
+    prev_cum = 0.0
+    prev_width: Optional[float] = None
+    for upper, cumulative in entries:
+        count = max(cumulative - prev_cum, 0.0)
+        if math.isinf(upper):
+            width = prev_width if prev_width and prev_width > 0 else (prev_upper if prev_upper > 0 else 1.0)
+            bucket_upper = prev_upper + width
+        else:
+            bucket_upper = upper
+            width = bucket_upper - prev_upper
+            if width <= 0:
+                width = prev_width if prev_width and prev_width > 0 else 1.0
+                bucket_upper = prev_upper + width
+            prev_width = width
+        distribution.append({"lower": prev_upper, "upper": bucket_upper, "count": count})
+        prev_upper = bucket_upper
+        prev_cum = cumulative
+    return distribution
+
+
+def distribution_quantile(distribution: List[Dict[str, float]], total: float, quantile: float) -> float:
+    if not distribution or total <= 0:
+        return math.nan
+    target = max(min(quantile, 1.0), 0.0) * total
+    acc = 0.0
+    for bucket in distribution:
+        count = bucket["count"]
+        if count <= 0:
+            continue
+        next_acc = acc + count
+        if target <= next_acc:
+            width = bucket["upper"] - bucket["lower"]
+            if width <= 0:
+                return bucket["upper"]
+            fraction = (target - acc) / count if count > 0 else 0.0
+            return bucket["lower"] + fraction * width
+        acc = next_acc
+    return distribution[-1]["upper"]
+
+
+def bucket_distribution_stats(distribution: List[Dict[str, float]]) -> Dict[str, float]:
+    stats: Dict[str, float] = {}
+    if not distribution:
+        return stats
+    total = sum(bucket["count"] for bucket in distribution)
+    if total <= 0:
+        return stats
+    mean = sum(bucket["count"] * 0.5 * (bucket["lower"] + bucket["upper"]) for bucket in distribution) / total
+    second_moment = (
+        sum(
+            bucket["count"] * (bucket["lower"] ** 2 + bucket["lower"] * bucket["upper"] + bucket["upper"] ** 2) / 3.0
+            for bucket in distribution
+        )
+        / total
+    )
+    variance = max(second_moment - mean**2, 0.0)
+    stats["mean"] = mean
+    stats["std"] = math.sqrt(variance)
+    stats["median"] = distribution_quantile(distribution, total, 0.5)
+    stats["p90"] = distribution_quantile(distribution, total, 0.9)
+    stats["p95"] = distribution_quantile(distribution, total, 0.95)
+    return stats
+
+
+def compute_rollout_stats_from_prom(
+    count_df: pd.DataFrame,
+    sum_df: pd.DataFrame,
+    bucket_df: pd.DataFrame,
+    step_seconds: float,
+) -> Tuple[Dict[str, float], List[Dict[str, float]]]:
+    if count_df.empty and sum_df.empty and bucket_df.empty:
+        return {}, []
+    total_rollouts = integrate_rate_series(count_df[["ts", "value"]], step_seconds) if not count_df.empty else 0.0
+    total_duration = integrate_rate_series(sum_df[["ts", "value"]], step_seconds) if not sum_df.empty else math.nan
+    bucket_totals = integrate_rate_by_label(bucket_df, "label_le", step_seconds)
+    distribution = build_bucket_distribution(bucket_totals)
+    distribution_total = sum(bucket["count"] for bucket in distribution) if distribution else 0.0
+    effective_n = total_rollouts if total_rollouts > 0 else distribution_total
+    if effective_n <= 0:
+        return {}, distribution
+    stats: Dict[str, float] = {"n": effective_n}
+    dist_stats = bucket_distribution_stats(distribution) if distribution else {}
+    mean_from_sum = (
+        total_duration / effective_n if effective_n > 0 and not math.isnan(total_duration) else math.nan
+    )
+    if not math.isnan(mean_from_sum):
+        stats["mean"] = mean_from_sum
+    elif dist_stats:
+        stats["mean"] = dist_stats.get("mean", math.nan)
+    else:
+        stats["mean"] = math.nan
+    stats["std"] = dist_stats.get("std", math.nan) if dist_stats else math.nan
+    stats["median"] = dist_stats.get("median", math.nan) if dist_stats else math.nan
+    stats["p90"] = dist_stats.get("p90", math.nan) if dist_stats else math.nan
+    stats["p95"] = dist_stats.get("p95", math.nan) if dist_stats else math.nan
+    return stats, distribution
+
+
+def synthesize_rollout_samples(distribution: List[Dict[str, float]], max_samples: int = 2000) -> pd.DataFrame:
+    if not distribution:
+        return pd.DataFrame({"rollout_seconds": []})
+    total = sum(bucket["count"] for bucket in distribution)
+    if total <= 0:
+        return pd.DataFrame({"rollout_seconds": []})
+    scaling = total / max_samples if total > max_samples else 1.0
+    samples: List[float] = []
+    for bucket in distribution:
+        count = bucket["count"]
+        lower = bucket["lower"]
+        upper = bucket["upper"]
+        if count <= 0:
+            continue
+        if upper <= lower:
+            samples.append(lower)
+            continue
+        if scaling > 1.0:
+            sample_n = int(max(1, round(count / scaling)))
+        else:
+            sample_n = int(max(1, round(count)))
+        for i in range(sample_n):
+            frac = (i + 0.5) / sample_n
+            samples.append(lower + frac * (upper - lower))
+    return pd.DataFrame({"rollout_seconds": samples})
 
 
 def prom_query_range(
@@ -91,9 +266,10 @@ def export_prometheus_metrics(
     end: str,
     step: str,
     outdir: Path,
-) -> Dict[str, pd.DataFrame]:
+) -> Dict[str, Any]:
     """Collect required Prometheus metrics and write raw CSV files."""
     results: Dict[str, pd.DataFrame] = {}
+    step_seconds = max(step_to_seconds(step), 1.0)
 
     queries = {
         "headroom": "carla_headroom_ratio",
@@ -102,6 +278,9 @@ def export_prometheus_metrics(
             "sum(rate(carla_rollout_duration_seconds_sum[5m])) "
             "/ sum(rate(carla_rollout_duration_seconds_count[5m]))"
         ),
+        "rollout_sum_rate": "sum(rate(carla_rollout_duration_seconds_sum[5m]))",
+        "rollout_count_rate": "sum(rate(carla_rollout_duration_seconds_count[5m]))",
+        "rollout_buckets": "sum(rate(carla_rollout_duration_seconds_bucket[5m])) by (le)",
     }
 
     for name, query in queries.items():
@@ -138,6 +317,15 @@ def export_prometheus_metrics(
     else:
         results["rollout_quantiles"] = pd.DataFrame(columns=["ts", "p50", "p90", "p95"])
         quantiles_path.write_text("ts,p50,p90,p95\n", encoding="utf-8")
+
+    rollout_stats_prom, distribution = compute_rollout_stats_from_prom(
+        results.get("rollout_count_rate", pd.DataFrame()),
+        results.get("rollout_sum_rate", pd.DataFrame()),
+        results.get("rollout_buckets", pd.DataFrame()),
+        step_seconds,
+    )
+    results["rollout_stats_prom"] = rollout_stats_prom
+    results["rollout_distribution_prom"] = distribution
 
     return results
 
@@ -347,7 +535,7 @@ def main() -> None:
     outdir = Path(args.outdir)
     ensure_dir(outdir)
 
-    prom_results: Dict[str, pd.DataFrame] = {}
+    prom_results: Dict[str, Any] = {}
     headroom_summary = pd.DataFrame(columns=["metric", "value"])
     decisions_summary = pd.DataFrame(columns=["status", "mean_rate"])
     rollout_quantiles = pd.DataFrame(columns=["ts", "p50", "p90", "p95"])
@@ -385,7 +573,9 @@ def main() -> None:
         args.timezone,
     )
 
-    rollout_stats: Dict[str, float] = {}
+    prom_rollout_stats = prom_results.get("rollout_stats_prom", {}) if prom_results else {}
+    prom_rollout_distribution = prom_results.get("rollout_distribution_prom", []) if prom_results else []
+    rollout_stats: Dict[str, float] = dict(prom_rollout_stats) if prom_rollout_stats else {}
     if args.rollouts_csv:
         rollouts_df = load_rollouts_csv(Path(args.rollouts_csv))
         rollout_stats = plot_rollout_histograms(rollouts_df, outdir)
@@ -409,11 +599,28 @@ def main() -> None:
                 [{"n": 0, "mean_rollout_s": math.nan, "std_s": math.nan, "ci95_lo": math.nan, "ci95_hi": math.nan}]
             ).to_csv(outdir / "rollout_summary.csv", index=False)
     else:
-        # Create placeholder figures
-        plot_rollout_histograms(pd.DataFrame({"rollout_seconds": []}), outdir)
-        pd.DataFrame(
-            [{"n": 0, "mean_rollout_s": math.nan, "std_s": math.nan, "ci95_lo": math.nan, "ci95_hi": math.nan}]
-        ).to_csv(outdir / "rollout_summary.csv", index=False)
+        if rollout_stats:
+            n_float = max(float(rollout_stats.get("n", 0.0)), 0.0)
+            n = max(int(round(n_float)), 0)
+            std_val = rollout_stats.get("std", math.nan)
+            mean_val = rollout_stats.get("mean", math.nan)
+            ci95 = 1.96 * (std_val / math.sqrt(n_float)) if n_float > 1 and not math.isnan(std_val) else 0.0
+            summary_row = {
+                "n": n,
+                "mean_rollout_s": mean_val,
+                "std_s": std_val,
+                "ci95_lo": mean_val - ci95 if not math.isnan(mean_val) else math.nan,
+                "ci95_hi": mean_val + ci95 if not math.isnan(mean_val) else math.nan,
+            }
+            pd.DataFrame([summary_row]).to_csv(outdir / "rollout_summary.csv", index=False)
+            synthetic_rollouts = synthesize_rollout_samples(prom_rollout_distribution)
+            plot_rollout_histograms(synthetic_rollouts, outdir)
+        else:
+            # Create placeholder figures
+            plot_rollout_histograms(pd.DataFrame({"rollout_seconds": []}), outdir)
+            pd.DataFrame(
+                [{"n": 0, "mean_rollout_s": math.nan, "std_s": math.nan, "ci95_lo": math.nan, "ci95_hi": math.nan}]
+            ).to_csv(outdir / "rollout_summary.csv", index=False)
 
     if args.decisions_csv:
         decisions_df = load_decisions_csv(Path(args.decisions_csv))
